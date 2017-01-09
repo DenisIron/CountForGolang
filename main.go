@@ -5,48 +5,49 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 func main() {
-	totalResult := 0
-	gorout := 0
-	startNext := make(chan bool)
-	urls := make([]string, 1000) //Создаем срез, заполняемый вводимыми сайтами
+	var (
+		totalResult = 0
+		k           = 5
+		gorout      = 0
+		wait        sync.WaitGroup
+	)
+	searchGo := "Go"             //Прописываем какие вхождения будем искать на сайтах
+	urls := make([]string, 1000) //Создаем slice, заполняемый вводимыми сайтами
 	for i := range urls {
 		fmt.Scanln(&urls[i]) //Вводим URL, в котором будем искать количество вхождений
+		url := urls[i]
+		if gorout < k {
+			wait.Add(1)
+			go countGo(url, &totalResult, &gorout, searchGo) //Запускаем горутины для 5 сайтов
+		} else {
+			wait.Wait() //Если горутин больше 5, то ждем пока хотя бы одна из них не выполнится
+			wait.Add(1)
+			go countGo(url, &totalResult, &gorout, searchGo)
+		}
 		if urls[i] == "" {
 			break
 		}
-		if gorout < 5 {
-			gorout++
-			go countGo(urls, i, &totalResult, startNext, &gorout) //Запускаем горутины для 5 сайтов
-		} else {
-			func() {
-				<-startNext //Если горутин больше 5, то ждем пока хотя бы одна из них не выполнится
-			}()
-		}
-
 	}
-	defer fmt.Printf("Total: %d\n", totalResult)
+	fmt.Printf("Total: %d\n", totalResult)
 }
 
-func countGo(urls []string, i int, totalResult *int, startNext chan bool, gorout *int) {
-	searchGo := "Go" // Прописываем какие вхождения будем искать на сайтах
-	url := urls[i]
+func countGo(url string, totalResult *int, gorout *int, searchGo string) {
+	*gorout++
 	resp, err := http.Get(url)
-	er(err)
 	site, err := ioutil.ReadAll(resp.Body)
 	er(err)
-	text := string(site)
-	count := strings.Count(text, searchGo) //Считает количество вхождений на сайте
+	count := strings.Count(string(site), searchGo) //Считает количество вхождений на сайте
 	fmt.Printf("Count for %s = %d\n", url, count)
 	*totalResult += count //Суммируем вхождения на всех заданных сайтах
 	*gorout--
-	startNext <- true
 }
 
 func er(err error) {
 	if err != nil {
-		return
+		panic(er)
 	}
 }
