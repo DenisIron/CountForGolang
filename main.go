@@ -17,12 +17,12 @@ func main() {
 		gorout      = 0
 		wait        sync.WaitGroup
 	)
-	finalAllUrls := make(chan bool)                                   // канал для сигнала о том, что все горутины выполнены
-	finalOneUrls := make(chan bool)                                   // канал для сигнала о выполнении 1 горутины
-	var sliceUrls []string                                           //Создаем slice, заполняемый вводимыми сайтами
+	finalAllUrls := make(chan bool) // канал для сигнала о том, что все горутины выполнены
+	finalOneUrls := make(chan bool) // канал для сигнала о выполнении 1 горутины
+	var sliceUrls []string          //Создаем slice, заполняемый вводимыми сайтами
 
-	urls(sliceUrls)                                                  //Заполняем slice сайтами
-
+	urls(sliceUrls)            //Заполняем slice сайтами
+	lenSlice := len(sliceUrls) //Количество всех сайтов
 	for i := range sliceUrls {
 		url := sliceUrls[i] //Заносим в отдельную переменную 1 сайт
 		if gorout < k {
@@ -35,16 +35,17 @@ func main() {
 		}
 
 	}
-	go func(finalOneUrls chan bool, finalAllUrls chan bool) bool {
-		for i := 0; i < len(sliceUrls); i++ {
-			<-finalOneUrls
-		}
-		finalAllUrls <- true
-	}
+	//Функция для проверки выполнения всех горутин
+	go allUrls(finalOneUrls, finalAllUrls, lenSlice)
 	<-finalAllUrls // Подаем сигнал о том, что все горутины выполнены
 	fmt.Printf("Total: %d\n", totalResult)
 }
-
+func allUrls(finalOneUrls chan bool, finalAllUrls chan bool, lenSlice int) {
+	for i := 0; i < lenSlice; i++ {
+		<-finalOneUrls
+	}
+	finalAllUrls <- true
+}
 func countGo(url string, totalResult *int, gorout *int, oneUr chan bool) {
 	*gorout++
 	resp, err := http.Get(url)
