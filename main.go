@@ -33,13 +33,12 @@ func main() {
 			wait.Add(1)
 			go countGo(url, &totalResult, &gorout, finalOneUrls)
 		}
-
 	}
-	//Функция для проверки выполнения всех горутин
-	go allUrls(finalOneUrls, finalAllUrls, lenSlice)
-	<-finalAllUrls // Подаем сигнал о том, что все горутины выполнены
+	go allUrls(finalOneUrls, finalAllUrls, lenSlice) //Функция для проверки выполнения всех горутин
+	<-finalAllUrls                                   // Подаем сигнал о том, что все горутины выполнены
 	fmt.Printf("Total: %d\n", totalResult)
 }
+
 func allUrls(finalOneUrls chan bool, finalAllUrls chan bool, lenSlice int) {
 	for i := 0; i < lenSlice; i++ {
 		<-finalOneUrls
@@ -55,7 +54,7 @@ func countGo(url string, totalResult *int, gorout *int, oneUr chan bool) {
 	fmt.Printf("Count for %s = %d\n", url, count)
 	*totalResult += count //Суммируем вхождения на всех заданных сайтах
 	*gorout--
-	finalOneUrls <- true
+	oneUr <- true
 }
 
 func urls(sliceUrls []string) []string {
