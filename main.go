@@ -18,7 +18,7 @@ func main() {
 		wait        sync.WaitGroup
 	)
 	finalAllUrls := make(chan bool) // канал для сигнала о том, что все горутины выполнены
-	finalOneUrls := make(chan bool) // канал для сигнала о выполнении 1 горутины
+	finalOneUr := make(chan bool)   // канал для сигнала о выполнении 1 горутины
 	var sliceUrls []string          //Создаем slice, заполняемый вводимыми сайтами
 
 	urls(sliceUrls)            //Заполняем slice сайтами
@@ -27,21 +27,23 @@ func main() {
 		url := sliceUrls[i] //Заносим в отдельную переменную 1 сайт
 		if gorout < k {
 			wait.Add(1)
-			go countGo(url, &totalResult, &gorout, finalOneUrls) //Запускаем горутины для 5 сайтов
+			go countGo(url, &totalResult, &gorout, finalOneUr) //Запускаем горутины для 5 сайтов
+			wait.Add(-1)
 		} else {
-			wait.Wait() //Если горутин больше 5, то ждем пока хотя бы одна из них не выполнится
+			<-finalOneUr //Если горутин больше 5, то ждем пока хотя бы одна из них не выполнится
 			wait.Add(1)
-			go countGo(url, &totalResult, &gorout, finalOneUrls)
+			go countGo(url, &totalResult, &gorout, finalOneUr)
+			wait.Add(-1)
 		}
 	}
-	go allUrls(finalOneUrls, finalAllUrls, lenSlice) //Функция для проверки выполнения всех горутин
-	<-finalAllUrls                                   // Подаем сигнал о том, что все горутины выполнены
+	go allUrls(finalOneUr, finalAllUrls, lenSlice) //Функция для проверки выполнения всех горутин
+	<-finalAllUrls                                 // Подаем сигнал о том, что все горутины выполнены
 	fmt.Printf("Total: %d\n", totalResult)
 }
 
-func allUrls(finalOneUrls chan bool, finalAllUrls chan bool, lenSlice int) {
+func allUrls(finalOneUr chan bool, finalAllUrls chan bool, lenSlice int) {
 	for i := 0; i < lenSlice; i++ {
-		<-finalOneUrls
+		<-finalOneUr
 	}
 	finalAllUrls <- true
 }
@@ -63,6 +65,8 @@ func urls(sliceUrls []string) []string {
 	urlsEr, err := urlsStdin.ReadString('\n') //Проверяем содержимое командной строки
 	if err == nil {
 		sliceUrls = strings.Split(urlsEr, "\n") //Полученную на входе строку преобразуем в slice с Urls
+	} else {
+		er(err)
 	}
 	return sliceUrls
 }
