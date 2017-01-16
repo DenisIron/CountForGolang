@@ -19,7 +19,7 @@ func main() {
 	)
 	finalAllUrls := make(chan bool) // канал для сигнала о том, что все горутины выполнены
 	finalOneUr := make(chan bool)   // канал для сигнала о выполнении 1 горутины
-	var sliceUrls []string          //Создаем slice, заполняемый вводимыми сайтами
+	var sliceUrls []string          // Создаем slice, заполняемый вводимыми сайтами
 
 	urls(sliceUrls)            //Заполняем slice сайтами
 	lenSlice := len(sliceUrls) //Количество всех сайтов
@@ -27,12 +27,16 @@ func main() {
 		url := sliceUrls[i] //Заносим в отдельную переменную 1 сайт
 		if gorout < k {
 			wait.Add(1)
-			go countGo(url, &totalResult, &gorout, finalOneUr) //Запускаем горутины для 5 сайтов
+			gorout++
+			go countGo(url, &totalResult, finalOneUr) //Запускаем горутины для 5 сайтов
+			gorout--
 			wait.Add(-1)
 		} else {
 			<-finalOneUr //Если горутин больше 5, то ждем пока хотя бы одна из них не выполнится
 			wait.Add(1)
-			go countGo(url, &totalResult, &gorout, finalOneUr)
+			gorout++
+			go countGo(url, &totalResult, finalOneUr)
+			gorout--
 			wait.Add(-1)
 		}
 	}
@@ -47,15 +51,13 @@ func allUrls(finalOneUr chan bool, finalAllUrls chan bool, lenSlice int) {
 	}
 	finalAllUrls <- true
 }
-func countGo(url string, totalResult *int, gorout *int, oneUr chan bool) {
-	*gorout++
+func countGo(url string, totalResult *int, oneUr chan bool) {
 	resp, err := http.Get(url)
 	site, err := ioutil.ReadAll(resp.Body)
 	er(err)
 	count := strings.Count(string(site), "Go") //Считает количество вхождений на сайте
 	fmt.Printf("Count for %s = %d\n", url, count)
 	*totalResult += count //Суммируем вхождения на всех заданных сайтах
-	*gorout--
 	oneUr <- true
 }
 
