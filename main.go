@@ -16,43 +16,42 @@ func main() {
 		k           = 5 //Макс. число горутин
 		gorout      = 0
 		wait        sync.WaitGroup
+		//sliceUrls   []string // Создаем slice, заполняемый вводимыми сайтами
 	)
 	finalAllUrls := make(chan bool) // канал для сигнала о том, что все горутины выполнены
 	finalOneUr := make(chan bool)   // канал для сигнала о выполнении 1 горутины
-	var sliceUrls []string          // Создаем slice, заполняемый вводимыми сайтами
+	chUr := make(chan string)       // канал для сайтов
+	urls(chUr)                      //Заполняем канал сайтами
 
-	urls(sliceUrls)            //Заполняем slice сайтами
-	lenSlice := len(sliceUrls) //Количество всех сайтов
-	for i := range sliceUrls {
-		url := sliceUrls[i] //Заносим в отдельную переменную 1 сайт
+	for {
 		if gorout < k {
 			wait.Add(1)
 			gorout++
-			go countGo(url, &totalResult, finalOneUr) //Запускаем горутины для 5 сайтов
+			go countGo(&totalResult, finalOneUr, chUr) //Запускаем горутины для 5 сайтов
 			gorout--
 			wait.Add(-1)
 		} else {
 			<-finalOneUr //Если горутин больше 5, то ждем пока хотя бы одна из них не выполнится
 			wait.Add(1)
 			gorout++
-			go countGo(url, &totalResult, finalOneUr)
+			go countGo(&totalResult, finalOneUr, chUr)
 			gorout--
 			wait.Add(-1)
 		}
 	}
-	go allUrls(finalOneUr, finalAllUrls, lenSlice) //Функция для проверки выполнения всех горутин
-	<-finalAllUrls                                 // Подаем сигнал о том, что все горутины выполнены
+	go allUrls(finalAllUrls, wait) //Функция для проверки выполнения всех горутин
+	<-finalAllUrls                 // Подаем сигнал о том, что все горутины выполнены
 	fmt.Printf("Total: %d\n", totalResult)
 }
 
-func allUrls(finalOneUr chan bool, finalAllUrls chan bool, lenSlice int) {
-	for i := 0; i < lenSlice; i++ {
-		<-finalOneUr
-	}
+func allUrls(finalAllUrls chan bool, wait sync.WaitGroup) {
+	wait.Wait()
 	finalAllUrls <- true
 }
-func countGo(url string, totalResult *int, oneUr chan bool) {
+func countGo(totalResult *int, oneUr chan bool, chUr chan string) {
+	url := <-chUr // Передаем в переменную 1 сайт
 	resp, err := http.Get(url)
+	er(err)
 	site, err := ioutil.ReadAll(resp.Body)
 	er(err)
 	count := strings.Count(string(site), "Go") //Считает количество вхождений на сайте
@@ -61,16 +60,19 @@ func countGo(url string, totalResult *int, oneUr chan bool) {
 	oneUr <- true
 }
 
-func urls(sliceUrls []string) []string {
+func urls(chUr chan string) {
 	urlsStdin := bufio.NewReader(os.Stdin) //Считываем строку с сайтами из командной строки
 	//urlsStdin, err := ioutil.ReadAll(os.Stdin) //Второй возможный вариант
-	urlsEr, err := urlsStdin.ReadString('\n') //Проверяем содержимое командной строки
-	if err == nil {
-		sliceUrls = strings.Split(urlsEr, "\n") //Полученную на входе строку преобразуем в slice с Urls
-	} else {
-		er(err)
+	for {
+		urlsEr, err := urlsStdin.ReadString('\n') //Проверяем содержимое командной строки
+		if err == nil {
+			urlsEr = strings.Replace(urlsEr, "\n", "", -1)
+			//sliceUrls = strings.Split(urlsEr, "\n") //Полученную на входе строку преобразуем в slice с Urls
+			chUr <- urlsEr
+		} else {
+			er(err)
+		}
 	}
-	return sliceUrls
 }
 
 func er(err error) {
