@@ -12,32 +12,30 @@ import (
 
 func main() {
 	var (
-		wait        sync.WaitGroup
-		totalResult = 0 //Итоговое кол-во вхождений
-		k           = 5 //Макс. число горутин
+		wait        sync.WaitGroup //счетчик
+		totalResult = 0
+		k           = 5
 	)
 	finalAllUrls := make(chan bool) // канал для сигнала о том, что все горутины выполнены
-	finalOneUr := make(chan bool)   // канал для сигнала о выполнении 1 горутины
 	chUr := make(chan string, k)    // буферизированный канал для сайтов
 
-	go urls(chUr) //Заполняем канал сайтами
+	go urlsInChar(chUr) //Заполняем канал сайтами
 
 	for range chUr {
-		go countGo(&totalResult, finalOneUr, chUr, &wait) //Запускаем горутины для 5 сайтов
+		wait.Add(1)                           // добавляет 1 к счётчику из пакета sync
+		go countGo(&totalResult, chUr, &wait) //Запускаем горутины для 5 сайтов
 	}
-	//<-finalOneUr                                      //Если горутин больше 5, то ждем пока хотя бы одна из них выполнится
 
-	go allUrls(finalAllUrls, &wait) //Функция для проверки выполнения всех горутин
-	<-finalAllUrls                  // Подаем сигнал о том, что все горутины выполнены
+	go allUrlsFinish(finalAllUrls, &wait) //Функция для проверки выполнения всех горутин
+	<-finalAllUrls                        //Подаем сигнал о том, что все горутины выполнены
 	fmt.Printf("Total: %d\n", totalResult)
 }
 
-func allUrls(finalAllUrls chan bool, wait *sync.WaitGroup) {
-	wait.Wait() // Ждем завершения всех горутин
-	//finalAllUrls <- true
+func allUrlsFinish(finalAllUrls chan bool, wait *sync.WaitGroup) {
+	wait.Wait() // Ждем завершения всех горутин, когда счетчик равен 0
+	finalAllUrls <- true
 }
-func countGo(totalResult *int, oneUr chan bool, chUr chan string, wait *sync.WaitGroup) {
-	wait.Add(1)
+func countGo(totalResult *int, chUr chan string, wait *sync.WaitGroup) {
 	url := <-chUr // Передаем в переменную 1 сайт
 	resp, err := http.Get(url)
 	er(err)
@@ -46,14 +44,13 @@ func countGo(totalResult *int, oneUr chan bool, chUr chan string, wait *sync.Wai
 	count := strings.Count(string(site), "Go") //Считает количество вхождений на сайте
 	fmt.Printf("Count for %s = %d\n", url, count)
 	*totalResult += count //Суммирует вхождения на всех заданных сайтах
-	wait.Add(-1)
-	oneUr <- true
+	wait.Done()           //уменьшает счётчик на 1
 }
 
-func urls(chUr chan string) {
-	urlsStdin := bufio.NewReader(os.Stdin) //Считываем строку с сайтами из командной строки
+func urlsInChar(chUr chan string) {
+	urlsStdin := bufio.NewReader(os.Stdin)
 	for {
-		urlsEr, err := urlsStdin.ReadString('\n') //Проверяем содержимое командной строки
+		urlsEr, err := urlsStdin.ReadString('\n')
 		if err == nil {
 			urlsEr = strings.Replace(urlsEr, "\n", "", -1)
 			chUr <- urlsEr
@@ -65,6 +62,6 @@ func urls(chUr chan string) {
 
 func er(err error) {
 	if err != nil {
-		panic(er)
+		fmt.Println("Error")
 	}
 }
