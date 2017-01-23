@@ -15,36 +15,52 @@ func main() {
 		wait        sync.WaitGroup //счетчик
 		totalResult = 0
 		k           = 5
+		urls        = []string{}
 	)
-	finalAllUrls := make(chan bool) // канал для сигнала о том, что все горутины выполнены
-	chUr := make(chan string, k)    // буферизированный канал для сайтов
+	//finalAllUrls := make(chan bool) // канал для сигнала о том, что все горутины выполнены
+	chUr := make(chan string, k) // буферизированный канал для сайтов
+	chCount := make(chan int)    // канал для количества вхождений на каждом сайте
 
-	go urlsInChar(chUr) //Заполняем канал сайтами
-
-	for range chUr {
-		wait.Add(1)                           // добавляет 1 к счётчику из пакета sync
-		go countGo(&totalResult, chUr, &wait) //Запускаем горутины для 5 сайтов
+	go urlsInChar(chUr) // Заполняем канал сайтами
+	for i := range chUr {
+		urls[i] = <-chUr // Передаем в переменную 1 сайт
+	}
+	for _, url := range urls {
+		wait.Add(1)                    // добавляет 1 к счётчику из пакета sync
+		go countGo(url, wait, chCount) //Запускаем горутины для 5 сайтов
 	}
 
-	go allUrlsFinish(finalAllUrls, &wait) //Функция для проверки выполнения всех горутин
-	<-finalAllUrls                        //Подаем сигнал о том, что все горутины выполнены
+	//go allUrlsFinish(finalAllUrls, &wait) //Функция для проверки выполнения всех горутин
+	//<-finalAllUrls                        //Подаем сигнал о том, что все горутины выполнены
+	wait.Wait() // Ждем завершения всех горутин, когда счетчик равен 0
+
+	allCount(chCount, totalResult) //Функция для подсчета общего кол-ва всех вхождений на сайтах
 	fmt.Printf("Total: %d\n", totalResult)
 }
 
-func allUrlsFinish(finalAllUrls chan bool, wait *sync.WaitGroup) {
+/*func allUrlsFinish(finalAllUrls chan bool, wait *sync.WaitGroup) {
 	wait.Wait() // Ждем завершения всех горутин, когда счетчик равен 0
 	finalAllUrls <- true
-}
-func countGo(totalResult *int, chUr chan string, wait *sync.WaitGroup) {
-	url := <-chUr // Передаем в переменную 1 сайт
+}*/
+
+func countGo(url string, wait sync.WaitGroup, chCount chan int) {
+	defer wait.Done() //Уменьшает счётчик на 1
 	resp, err := http.Get(url)
 	er(err)
 	site, err := ioutil.ReadAll(resp.Body)
 	er(err)
-	count := strings.Count(string(site), "Go") //Считает количество вхождений на сайте
+	count := countGoOnSite(site) //Считает количество вхождений на сайте
+	chCount <- count             //Передаем количество вхождений в канал
+	printCount(url, count)       //Печатаем результат в консоли
+}
+
+func countGoOnSite(site []byte) int {
+	count := strings.Count(string(site), "Go")
+	return count
+}
+
+func printCount(url string, count int) {
 	fmt.Printf("Count for %s = %d\n", url, count)
-	*totalResult += count //Суммирует вхождения на всех заданных сайтах
-	wait.Done()           //уменьшает счётчик на 1
 }
 
 func urlsInChar(chUr chan string) {
@@ -58,6 +74,13 @@ func urlsInChar(chUr chan string) {
 			er(err)
 		}
 	}
+}
+
+func allCount(chCount chan int, totalResult int) int {
+	for range chCount {
+		totalResult += <-chCount
+	}
+	return totalResult
 }
 
 func er(err error) {
