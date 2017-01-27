@@ -24,15 +24,12 @@ func main() {
 	go urlsInChar(chUr) // Заполняем канал сайтами
 
 	for i := 0; i < k; i++ { //ограничиваем количество гороутин
+		// с целью избавления от ошибки связанной с sync добавляем ф-цию в main
 		go func() {
 			for range chUr {
 				wait.Add(1)  // добавляет 1 к счётчику из пакета sync
-				url = <-chUr // передаем из буферизированного сайта 1 сайт в переменную
-				// с целью избавления от ошибки связанной с sync добавляем ф-цию в main
-				resp, err := http.Get(url)
-				er(err)
-				site, err := ioutil.ReadAll(resp.Body)
-				er(err)
+				url = <-chUr // передаем из буферизированного канала 1 сайт в переменную
+				site := getBodySite(url)
 				count := countGoOnSite(site) //Считает количество вхождений на сайте
 				chCount <- count             //Передаем количество вхождений в канал, для дальнейшего подсчета
 				printCount(url, count)       //Печатаем результат в консоли
@@ -44,6 +41,14 @@ func main() {
 	wait.Wait()                              // Ждем завершения всех горутин, когда счетчик равен 0
 	result := allCount(chCount, totalResult) //Функция для подсчета общего кол-ва всех вхождений на сайтах
 	fmt.Printf("Total: %d\n", result)
+}
+
+func getBodySite(url string) []byte {
+	resp, err := http.Get(url)
+	er(err)
+	site, err := ioutil.ReadAll(resp.Body)
+	er(err)
+	return site
 }
 
 func countGoOnSite(site []byte) int {
