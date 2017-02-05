@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -12,40 +13,37 @@ import (
 
 func main() {
 	var (
-		wait        sync.WaitGroup //счетчик
-		totalResult int
-		k           = 5
-		url         string //строка для хранения 1 сайта
+		wait sync.WaitGroup
+		k    = 5
 	)
-	chUr := make(chan string, k) // буферизированный канал для 5 сайтов
-	chCount := make(chan int)    // канал для количества вхождений на каждом сайте
+	chUr := make(chan string, k)
+	chCount := make(chan int)
+	//chLimitGor := make(chan int, k) // канал для ограничения кол-ва гороутин
+	// додумать обработку ошибок Error
+	go urlsInChar(chUr)
 
-	go urlsInChar(chUr) // Заполняем канал сайтами
-
-	for i := 0; i < k; i++ { //ограничиваем количество гороутин
-		// с целью избавления от ошибки связанной с sync добавляем ф-цию в main
+	for i := 0; i < k; i++ {
+		wait.Add(1)
 		go func() {
-			wait.Add(1) // добавляет 1 к счётчику из пакета sync
-			for range chUr {
-				url = <-chUr                             // передаем из буферизированного канала 1 сайт в переменную
-				count := countGoOnSite(getBodySite(url)) //Считает количество вхождений на сайте
+			for url := range chUr {
+				count := countGoOnSite(getBodySite(url)) //Считает количество вхождений "Go" на сайте
 				chCount <- count                         //Передаем количество вхождений в канал, для дальнейшего подсчета
-				printCount(url, count)                   //Печатаем результат в консоли
+				go printCount(url, count)
 			}
-			wait.Done() //Уменьшает счётчик на 1
+			wait.Done()
 		}()
 	}
 
-	wait.Wait()                              // Ждем завершения всех горутин, когда счетчик равен 0
-	result := allCount(chCount, totalResult) //Функция для подсчета общего кол-ва всех вхождений на сайтах
-	fmt.Printf("Total: %d\n", result)
+	wait.Wait()
+	result := allCount(chCount) //Функция для подсчета общего кол-ва всех вхождений на сайтах
+	printResult(result)
 }
 
 func getBodySite(url string) []byte {
 	resp, err := http.Get(url)
-	er(err)
+	fatalErr(err)
 	site, err := ioutil.ReadAll(resp.Body)
-	er(err)
+	fatalErr(err)
 	return site
 }
 
@@ -58,7 +56,7 @@ func printCount(url string, count int) {
 	fmt.Printf("Count for %s = %d\n", url, count)
 }
 
-func urlsInChar(chUr chan string) {
+func urlsInChar(chUr chan string) { // +добавить передачу ошибки
 	urlsStdin := bufio.NewReader(os.Stdin)
 	for {
 		urlsEr, err := urlsStdin.ReadString('\n')
@@ -66,20 +64,38 @@ func urlsInChar(chUr chan string) {
 			urlsEr = strings.Replace(urlsEr, "\n", "", -1)
 			chUr <- urlsEr //передаем в буферизированный канал первые 5 сайтов
 		} else {
-			er(err)
+			fatalErr(err)
 		}
 	}
 }
 
-func allCount(chCount chan int, totalResult int) int {
+func allCount(chCount chan int) int {
+	totalResult := 0
 	for range chCount {
 		totalResult += <-chCount
 	}
 	return totalResult
 }
 
+func printResult(result int) {
+	fmt.Printf("Total: %d\n", result)
+}
+
+func fatalErr(err error) {
+	log.Fatal("Aborting: ", err)
+}
+
+/*Возможные варианты функций обработки ошибки:
 func er(err error) {
 	if err != nil {
 		panic(err)
 	}
 }
+
+func errors(err os.Error) {
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+}
+*/
