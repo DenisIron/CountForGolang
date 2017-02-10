@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -17,33 +16,36 @@ func main() {
 		k    = 5
 	)
 	chUr := make(chan string, k)
+	chEr := make(chan string)
 	chCount := make(chan int)
-	//chLimitGor := make(chan int, k) // канал для ограничения кол-ва гороутин
-	// додумать обработку ошибок Error
 	go urlsInChar(chUr)
 
 	for i := 0; i < k; i++ {
 		wait.Add(1)
 		go func() {
 			for url := range chUr {
-				count := countGoOnSite(getBodySite(url)) //Считает количество вхождений "Go" на сайте
-				chCount <- count                         //Передаем количество вхождений в канал, для дальнейшего подсчета
+				count := countGoOnSite(getSiteBody(url, chEr)) //Считает количество вхождений "Go" на сайте
+				chCount <- count                               //Передаем количество вхождений в канал, для дальнейшего подсчета
 				go printCount(url, count)
 			}
 			wait.Done()
 		}()
 	}
-
+	go errHandling(chEr)
 	wait.Wait()
 	result := allCount(chCount) //Функция для подсчета общего кол-ва всех вхождений на сайтах
 	printResult(result)
 }
 
-func getBodySite(url string) []byte {
+func getSiteBody(url string, chEr chan string) []byte {
 	resp, err := http.Get(url)
-	fatalErr(err)
+	if err != nil {
+		chEr <- "Error for URL: " + string(url)
+	}
 	site, err := ioutil.ReadAll(resp.Body)
-	fatalErr(err)
+	if err != nil {
+		chEr <- "Error in Body of URL: " + string(url)
+	}
 	return site
 }
 
@@ -60,18 +62,17 @@ func urlsInChar(chUr chan string) { // +добавить передачу оши
 	urlsStdin := bufio.NewReader(os.Stdin)
 	for {
 		urlsEr, err := urlsStdin.ReadString('\n')
-		if err == nil {
-			urlsEr = strings.Replace(urlsEr, "\n", "", -1)
-			chUr <- urlsEr //передаем в буферизированный канал первые 5 сайтов
-		} else {
-			fatalErr(err)
+		if err != nil {
+			break
 		}
+		urlsEr = strings.Replace(urlsEr, "\n", "", -1)
+		chUr <- urlsEr //передаем в буферизированный канал первые 5 сайтов
 	}
 }
 
 func allCount(chCount chan int) int {
 	totalResult := 0
-	for range chCount {
+	for range chCount { //Исправить!!!!
 		totalResult += <-chCount
 	}
 	return totalResult
@@ -81,11 +82,14 @@ func printResult(result int) {
 	fmt.Printf("Total: %d\n", result)
 }
 
-func fatalErr(err error) {
-	log.Fatal("Aborting: ", err)
+func errHandling(chEr chan string) {
+	url string
 }
 
 /*Возможные варианты функций обработки ошибки:
+func fatalErr(err error) {
+	log.Fatal("Aborting: ", err)
+}
 func er(err error) {
 	if err != nil {
 		panic(err)
